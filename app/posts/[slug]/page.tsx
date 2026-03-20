@@ -12,7 +12,7 @@ export default async function PostPage({
 
   return (
     <div className="flex flex-col flex-1 items-center bg-zinc-50 font-sans dark:bg-black">
-      <article className="flex flex-1 w-full max-w-3xl flex-col py-32 px-8 bg-white dark:bg-black">
+      <article className="flex flex-1 w-full max-w-3xl flex-col py-12 px-8 bg-white dark:bg-black">
         <header className="mb-8">
           <time className="text-sm text-zinc-500 dark:text-zinc-400">
             {metadata.date}
