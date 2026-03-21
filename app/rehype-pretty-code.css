@@ -1,0 +1,30 @@
+/* rehype-pretty-code: dual theme switching */
+code[data-theme*=" "],
+code[data-theme*=" "] span {
+  color: var(--shiki-light);
+  background-color: var(--shiki-light-bg);
+}
+
+@media (prefers-color-scheme: dark) {
+  code[data-theme*=" "],
+  code[data-theme*=" "] span {
+    color: var(--shiki-dark);
+    background-color: var(--shiki-dark-bg);
+  }
+}
+
+/* prose: let shiki control code block colours */
+.prose:has([data-rehype-pretty-code-figure]) {
+  --tw-prose-pre-bg: transparent;
+  --tw-prose-pre-code: inherit;
+}
+
+[data-rehype-pretty-code-figure] pre {
+  border: 1px solid #e5e7eb;
+}
+
+@media (prefers-color-scheme: dark) {
+  [data-rehype-pretty-code-figure] pre {
+    border-color: #374151;
+  }
+}
