@@ -1,0 +1,179 @@
+export const metadata = {
+  title: "멀티 LLM(GPT, Clova 등) 통합 인터페이스 설계 및 구현",
+  description:
+    "Adapter, Strategy 패턴을 활용해 멀티 LLM 통합 인터페이스를 설계하고 구현한 과정을 정리합니다.",
+  date: "2026-03-20",
+};
+
+## 배경
+
+피드인 프로젝트에서 인터뷰어 역할을 하는 챗봇을 구현하고 있었습니다.
+초기에는 GPT 하나만 사용했지만, 이후 Clova 등 여러 모델을 추가할 가능성이 높았습니다.
+확장에 유연한 구조를 고민하다 디자인 패턴을 적용하게 되었습니다.
+
+## 문제: 특정 LLM에 강결합된 코드
+
+기존 코드는 `sendMessage` 함수 내부에 GPT의 요청/응답 형식이 직접 박혀 있었습니다.
+
+```tsx
+const sendMessage = async (userMessage: string) => {
+  // ...
+
+  // GPT 전용 요청 body
+  const requestBody: GPTRequest = {
+    model: "gpt-4o",
+    messages: [...],
+    max_completion_tokens: 1024,  // Clova는 maxCompletionTokens
+  };
+
+  // GPT 전용 URL, 헤더
+  const response = await fetch(
+    "https://api.openai.com/v1/chat/completions",
+    // Clova는 https://clovastudio.stream.ntruss.com/...
+    {
+      headers: {
+        Authorization: `Bearer ${import.meta.env.VITE_OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify(requestBody),
+    },
+  );
+
+  const data: GPTResponse = await response.json();
+
+  // GPT 전용 응답 파싱
+  const reply = data.choices[0].message.content;
+  // Clova는 data.result.message.content
+};
+```
+
+이 상태에서 GPT를 Clova로 교체하려면 함수 내부를 통째로 수정해야 합니다.
+
+- 요청 body 구조가 다름 (`max_completion_tokens` vs `maxCompletionTokens`)
+- 응답 파싱 경로가 다름 (`choices[0].message.content` vs `result.message.content`)
+- API URL, 인증 헤더가 다름
+
+즉, **비즈니스 로직이 특정 LLM의 API 형식에 직접 의존**하고 있는 상태였습니다.
+
+## 해결: 공통 인터페이스 기반 추상화
+
+핵심 아이디어는 간단합니다.
+"모든 LLM은 결국 **메시지를 보내고, 응답 텍스트를 받는다**"는 공통점이 있으므로, 이를 인터페이스로 추상화합니다.
+
+### 1. 공통 인터페이스 정의
+
+```ts
+interface LLMMessage {
+  role: "system" | "user" | "assistant";
+  content: string;
+}
+
+interface LLMAdapter {
+  chatCompletion(messages: LLMMessage[]): Promise<string>;
+}
+```
+
+모든 LLM 구현체가 `LLMAdapter`를 따르므로, 비즈니스 로직은 구체적인 API 형식을 알 필요가 없습니다.
+
+### 2. Adapter 패턴 — 모델별 구현체
+
+각 LLM의 고유한 요청/응답 형식을 클래스 내부에 캡슐화합니다.
+
+```ts
+class GPTAdapter implements LLMAdapter {
+  private readonly model = "gpt-4o";
+
+  async chatCompletion(messages: LLMMessage[]): Promise<string> {
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: this.model,
+        messages,
+        max_completion_tokens: 1024,
+      }),
+    });
+    const data = await response.json();
+    return data.choices[0].message.content;
+  }
+}
+
+class ClovaAdapter implements LLMAdapter {
+  private readonly model = "HCX-005";
+
+  async chatCompletion(messages: LLMMessage[]): Promise<string> {
+    const response = await fetch(
+      `https://clovastudio.stream.ntruss.com/v3/chat-completions/${this.model}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${process.env.CLOVA_API_KEY}`,
+        },
+        body: JSON.stringify({
+          messages,
+          maxCompletionTokens: 1024,
+        }),
+      },
+    );
+    const data = await response.json();
+    return data.result.message.content;
+  }
+}
+```
+
+URL, 헤더, 요청 body 구조, 응답 파싱 등 모델마다 다른 부분이 모두 각 클래스 내부에 응집되어 있습니다.
+
+### 3. Strategy 패턴 — 구현체 교체
+
+비즈니스 로직은 `LLMAdapter` 인터페이스에만 의존하고, 어떤 LLM을 사용할지는 외부에서 주입합니다.
+
+```tsx
+function ChatRoom({ adapter }: { adapter: LLMAdapter }) {
+  const [messages, setMessages] = useState<LLMMessage[]>([]);
+
+  const sendMessage = async (userMessage: string) => {
+    const newMessages: LLMMessage[] = [
+      ...messages,
+      { role: "user", content: userMessage },
+    ];
+    setMessages(newMessages);
+
+    // 어떤 LLM이든 동일한 호출
+    const reply = await adapter.chatCompletion(newMessages);
+
+    setMessages([...newMessages, { role: "assistant", content: reply }]);
+  };
+
+  // ...
+}
+```
+
+```tsx
+// GPT 사용
+<ChatRoom adapter={new GPTAdapter()} />
+
+// Clova로 교체 — 이 한 줄만 변경
+<ChatRoom adapter={new ClovaAdapter()} />
+```
+
+## 개선 효과
+
+- **강결합 제거**: `ChatRoom`은 `LLMAdapter` 인터페이스에만 의존합니다. GPT인지 Clova인지 알지 못합니다.
+- **높은 응집도**: 모델별 API 세부사항이 각 Adapter 클래스 내부에 캡슐화되어, 수정이 필요할 때 해당 클래스만 보면 됩니다.
+- **확장 용이 (OCP)**: 새 LLM을 추가할 때 `LLMAdapter`를 구현한 클래스만 만들면 됩니다. 기존 코드는 수정하지 않습니다.
+
+## 회고
+
+처음에는 GPT만 사용했기 때문에 컴포넌트에 직접 구현했습니다.
+이후 Clova가 추가되면서 "앞으로 다른 모델도 추가되고 다시 되돌리기도 할 것 같고 유지보수에 좋은 방향이 무엇일까?"를 고민했고, 그 결과 공통 인터페이스 기반의 추상화를 도입하게 되었습니다.
+실제로 적용한 뒤에는 Adapter 클래스 하나만 작성하면 되었고, 기존 컴포넌트는 한 줄도 수정하지 않았습니다.
+
+이 경험을 통해 두 가지를 배웠습니다.
+
+- **Adapter 패턴**은 외부 시스템의 인터페이스 차이를 흡수하는 데 효과적입니다. LLM뿐 아니라 결제, 알림 등 외부 API를 다룰 때도 동일하게 적용할 수 있습니다.
+- **Strategy 패턴**은 "같은 역할을 하지만 구현이 다른 것들"을 교체 가능하게 만들어 줍니다. 핵심은 비즈니스 로직이 구체 구현이 아닌 인터페이스에 의존하도록 하는 것입니다.ㅋ
+
+디자인 패턴은 이론으로만 보면 와닿지 않지만, 실제 문제를 해결하는 과정에서 적용해보니 왜 필요한지 체감할 수 있었습니다.
