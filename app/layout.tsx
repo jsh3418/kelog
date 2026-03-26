@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
+import { ThemeProvider } from "./components/theme-provider";
+import { ThemeToggle } from "./components/theme-toggle";
 import "./globals.css";
 import "./rehype-pretty-code.css";
 
@@ -26,21 +28,25 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="en"
+      lang="ko"
+      suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        <header className="w-full border-b border-zinc-200 dark:border-zinc-800">
-          <div className="max-w-3xl mx-auto px-8 py-4">
-            <Link
-              href="/"
-              className="text-4xl font-semibold tracking-tight text-black dark:text-zinc-50"
-            >
-              kelog
-            </Link>
-          </div>
-        </header>
-        {children}
+        <ThemeProvider>
+          <header className="w-full border-b border-zinc-200 dark:border-zinc-800">
+            <div className="max-w-3xl mx-auto px-8 py-4 flex items-center justify-between">
+              <Link
+                href="/"
+                className="text-4xl font-semibold tracking-tight text-black dark:text-zinc-50"
+              >
+                kelog
+              </Link>
+              <ThemeToggle />
+            </div>
+          </header>
+          {children}
+        </ThemeProvider>
       </body>
     </html>
   );

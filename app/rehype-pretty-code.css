@@ -5,12 +5,10 @@ code[data-theme*=" "] span {
   background-color: var(--shiki-light-bg);
 }
 
-@media (prefers-color-scheme: dark) {
-  code[data-theme*=" "],
-  code[data-theme*=" "] span {
-    color: var(--shiki-dark);
-    background-color: var(--shiki-dark-bg);
-  }
+.dark code[data-theme*=" "],
+.dark code[data-theme*=" "] span {
+  color: var(--shiki-dark);
+  background-color: var(--shiki-dark-bg);
 }
 
 /* prose: let shiki control code block colours */
@@ -23,8 +21,7 @@ code[data-theme*=" "] span {
   border: 1px solid #e5e7eb;
 }
 
-@media (prefers-color-scheme: dark) {
-  [data-rehype-pretty-code-figure] pre {
-    border-color: #374151;
-  }
+.dark [data-rehype-pretty-code-figure] pre {
+  border-color: #374151;
+  background-color: var(--shiki-dark-bg);
 }

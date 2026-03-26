@@ -1,22 +1,19 @@
-import Link from "next/link";
 import { getAllPosts } from "@/lib/posts";
+import Link from "next/link";
 
 export default function Home() {
   const posts = getAllPosts();
 
   return (
-    <div className="flex flex-col flex-1 items-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col py-12 px-8 bg-white dark:bg-black">
+    <div className="flex flex-col flex-1 items-center bg-zinc-50 font-sans dark:bg-zinc-900">
+      <main className="flex flex-1 w-full max-w-3xl flex-col py-12 px-8 bg-white dark:bg-background">
         <h1 className="text-3xl font-semibold tracking-tight text-black dark:text-zinc-50 mb-12">
           Posts
         </h1>
         <ul className="flex flex-col gap-6">
           {posts.map((post) => (
             <li key={post.slug}>
-              <Link
-                href={`/posts/${post.slug}`}
-                className="group block"
-              >
+              <Link href={`/posts/${post.slug}`} className="group block">
                 <time className="text-sm text-zinc-500 dark:text-zinc-400">
                   {post.date}
                 </time>
