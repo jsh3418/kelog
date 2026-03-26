@@ -1,0 +1,115 @@
+export const metadata = {
+  title: "가속도 센서 기반 물리 시뮬레이션 최적화",
+  description:
+    "React Native 앱에서 Matter.js와 가속도 센서를 활용한 인터랙티브 애니메이션의 발열·프레임 문제를 해결한 과정을 정리합니다.",
+  date: "2025-02-01",
+};
+
+이 글은 핵심 기능인 가속도 센서 기반 물리 시뮬레이션을 구현하면서 겪은 성능 문제와 해결 과정을 정리합니다.
+
+## 구현 목표
+
+사용자가 기기를 기울이면 화면 속 아이콘들이 실시간으로 굴러다니는 물리 시뮬레이션을 만들고자 했습니다. 완료한 투두 항목이 아이콘으로 쌓이면서 하루의 성취를 시각적으로 체감할 수 있는 경험을 목표로 했습니다.
+
+<video
+  src="/videos/todotodo-physics-animation-1.mp4"
+  controls
+  loop
+  muted
+  playsInline
+  preload="metadata"
+  style={{
+    maxHeight: "80vh",
+    margin: "0 auto",
+    borderRadius: "16px",
+  }}
+/>
+
+이를 위해 세 가지 라이브러리를 조합했습니다.
+
+- **Matter.js**: 2D 물리 엔진. 중력·충돌·마찰 등 물리 법칙을 시뮬레이션
+- **react-native-game-engine**: 게임 루프를 제공하여 매 프레임마다 물리 엔진을 업데이트
+- **expo-sensor**: 기기의 가속도 센서 데이터를 읽어 기울기에 따라 물리 엔진의 중력 값을 조정
+
+```text
+[기기 기울임]
+    ↓
+[Accelerometer 데이터]
+    ↓
+[Matter.js 중력 변경]
+    ↓
+[아이콘 위치 재계산]
+    ↓
+[화면 렌더링]
+```
+
+## 문제: 발열, 배터리 소모, 불안정한 프레임
+
+초기 구현은 동작했지만 실제 기기에서 심각한 성능 문제가 발생했습니다.
+
+- 앱을 수 분만 사용해도 기기가 뜨거워짐
+- 센서와 연산이 쉬지 않고 돌아가면서 배터리가 빠르게 소진
+- 15~45fps 사이를 오가며 아이콘 움직임이 끊기거나 버벅임
+
+**핵심 원인**은 Accelerometer의 업데이트 간격을 별도로 설정하지 않아 센서가 가능한 한 빠르게 데이터를 전달하고 있었던 것이었습니다. JS 스레드가 초당 수백 번의 센서 콜백을 처리하느라 과부하에 걸렸고 정작 화면 갱신에 필요한 연산에 리소스를 할당하지 못했습니다.
+
+## 해결: 센서 업데이트 간격 조정
+
+```typescript
+Accelerometer.setUpdateInterval(16.66); // 60fps = 16.66ms
+```
+
+16.66ms는 60fps의 한 프레임에 해당하는 시간입니다. 이보다 자주 센서 데이터를 받아도 화면에 반영할 수 없으므로 의미가 없습니다. 이 설정만으로 JS 스레드의 부하가 크게 줄어 15~45fps에서 안정적인 60fps로 개선되었고 발열과 배터리 소모도 완화되었습니다.
+
+## 추가로 시도한 것: 컴포넌트 메모이제이션
+
+센서 간격 조정 후 렌더링 쪽에서도 개선할 수 있는지 살펴봤습니다. 아이콘 컴포넌트가 매 프레임 통째로 리렌더링되고 있었기 때문에 위치 컨테이너와 시각적 요소를 분리하고 `React.memo`를 적용했습니다.
+
+```tsx
+const IconContent = React.memo(({ icon }: { icon: string }) => {
+  return <Text>{icon}</Text>;
+});
+
+const PhysicsIcon = ({ body, icon }: { body: Matter.Body; icon: string }) => {
+  const { x, y } = body.position;
+  const angle = body.angle;
+
+  return (
+    <View
+      style={{
+        transform: [
+          { translateX: x },
+          { translateY: y },
+          { rotate: `${angle}rad` },
+        ],
+      }}
+    >
+      <IconContent icon={icon} />
+    </View>
+  );
+};
+```
+
+다만 이 최적화의 실질적 효과는 제한적이었다고 봅니다. `React.memo`가 막는 것은 `IconContent`의 리렌더링뿐이고 비용의 대부분을 차지하는 `PhysicsIcon`의 `<View>` 업데이트는 매 프레임 그대로 발생하기 때문입니다.
+
+## 회고
+
+센서 업데이트 간격 하나를 조정하는 것만으로 큰 폭의 개선이 가능했습니다. 반면 컴포넌트 메모이제이션은 렌더링 구조를 분석하는 과정에서 의미가 있었지만 매 프레임 갱신이 필요한 물리 시뮬레이션에서는 memo보다 렌더링 파이프라인 자체를 바꾸는 접근이 더 효과적이라는 것을 알게 되었습니다.
+
+현재는 React Native의 View 컴포넌트로 각 아이콘의 위치를 업데이트하고 있지만 react-native-skia 같은 Canvas 기반 렌더링을 활용하면 더 효율적입니다. View 기반에서는 아이콘 하나하나가 개별 네이티브 뷰이므로 매 프레임 N개의 뷰를 각각 업데이트해야 하지만 Canvas 기반에서는 하나의 캔버스 위에 모든 아이콘을 그리기 때문에 아이콘 수가 늘어나도 렌더링 비용이 크게 증가하지 않습니다. 아래는 동일한 물리 시뮬레이션을 react-native-game-engine(View 기반)과 react-native-skia(Canvas 기반)로 각각 구현하여 비교한 영상입니다.
+
+<video
+  src="/videos/todotodo-physics-animation-2.mp4"
+  controls
+  loop
+  muted
+  playsInline
+  preload="metadata"
+  style={{
+    maxHeight: "80vh",
+    margin: "0 auto",
+    borderRadius: "16px",
+  }}
+/>
+
+react-native-game-engine은 90~100fps, skia는 110~120fps를 유지하고 있습니다.
