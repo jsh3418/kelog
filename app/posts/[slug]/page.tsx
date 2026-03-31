@@ -1,10 +1,21 @@
 import { getPostSlugs } from "@/lib/posts";
+import type { Metadata } from "next";
 
-export default async function PostPage({
-  params,
-}: {
+type Props = {
   params: Promise<{ slug: string }>;
-}) {
+};
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { slug } = await params;
+  const { metadata } = await import(`@/content/posts/${slug}.mdx`);
+
+  return {
+    title: metadata.title,
+    description: metadata.description,
+  };
+}
+
+export default async function PostPage({ params }: Props) {
   const { slug } = await params;
   const { default: Post, metadata } = await import(
     `@/content/posts/${slug}.mdx`
