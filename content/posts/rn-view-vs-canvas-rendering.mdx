@@ -1,0 +1,185 @@
+export const metadata = {
+  title: "View는 100fps, Canvas는 120fps 왜??",
+  description:
+    "React Native에서 View 기반 렌더링과 Skia Canvas 기반 렌더링의 성능 차이가 발생하는 원인을 React Native의 렌더링 파이프라인부터 OS의 레이어 합성까지 살펴봅니다.",
+  date: "2026-03-30",
+};
+
+[이전 글](/posts/todotodo-physics-animation)에서 가속도 센서 기반 물리 시뮬레이션의 성능 문제를 해결한 과정을 정리했습니다. 글 마지막에 react-native-game-engine(View 기반)과 react-native-skia(Canvas 기반)로 동일한 시뮬레이션을 구현하여 비교한 영상을 남겼는데 View 기반은 90~100fps, Canvas 기반은 110~120fps였습니다.
+
+당시에는 "View는 개별 네이티브 뷰를 업데이트하고 Canvas는 하나의 캔버스에 그린다" 정도로 넘어갔습니다. 이번 글에서는 이 두 방식의 성능 차이가 왜 나는지 자세히 살펴봅니다.
+
+## View 업데이트
+
+물리 시뮬레이션에서 매 프레임 리렌더링되는 컴포넌트입니다.
+
+```tsx
+const PhysicsIcon = ({ body, icon }: { body: Matter.Body; icon: string }) => {
+  const { x, y } = body.position;
+  const angle = body.angle;
+
+  return (
+    <View
+      style={{
+        transform: [
+          { translateX: x },
+          { translateY: y },
+          { rotate: `${angle}rad` },
+        ],
+      }}
+    >
+      <Text>{icon}</Text>
+    </View>
+  );
+};
+```
+
+매 프레임 `body.position`이 바뀌면서 `<View>`의 `transform`이 갱신됩니다. 아이콘이 N개면 N개의 `<View>` 스타일이 매 프레임 바뀌는 겁니다.
+
+React Native의 렌더링 파이프라인을 보면 이 갱신이 얼마나 무거운지 알 수 있습니다.
+
+## React Native의 렌더링 파이프라인
+
+React Native에서 `<View>` 스타일이 바뀌면 JS Thread에서의 렌더링, Shadow Tree에서의 레이아웃 계산, UI Thread에서의 네이티브 뷰 업데이트를 순서대로 거칩니다.
+
+```text
+[JS Thread]
+  React가 리렌더링
+  → 새로운 transform 값 계산
+  → Shadow Tree로 전달
+      ↓
+[Shadow Tree]
+  Yoga가 레이아웃 재계산
+  → UI Thread로 전달
+      ↓
+[UI Thread]
+  네이티브 뷰 속성 업데이트
+  → OS가 화면을 다시 합성하여 표시
+```
+
+아이콘이 N개면 각 단계에서 **N개의 뷰를 처리**합니다.
+
+```text
+매 프레임(16ms 안에)
+JS Thread:    N개 리렌더링 + N개 전달
+Shadow Tree:  N개 레이아웃 재계산
+UI Thread:    N개 네이티브 뷰 업데이트
+```
+
+핵심은 매 프레임 **네이티브 뷰 N개를 개별 업데이트**한다는 구조 자체입니다.
+
+## Canvas는 레이어 1개만 합성한다
+
+**View 기반**: 아이콘 N개 = 네이티브 뷰 N개. 각 뷰는 OS가 관리하는 독립적인 객체이고, 매 프레임 N개의 뷰 속성을 개별 업데이트한 뒤 OS가 N개의 레이어를 합성합니다.
+
+**Canvas 기반**: 아이콘 N개 = 네이티브 뷰 1개(Canvas). 아이콘은 네이티브 뷰가 아니라 Canvas 위에 그려지는 픽셀입니다. Skia가 하나의 표면 위에 N개를 순서대로 그리고 결과를 GPU에 넘깁니다. Shadow Tree(Yoga)가 계산하는 건 `<View>`, `<Text>` 같은 네이티브 뷰의 레이아웃인데, Canvas 위에 그려지는 건 네이티브 뷰가 아니기 때문에 Yoga가 계산할 대상 자체가 없습니다.
+
+```text
+[View 기반]
+
+  UI Thread → N개 네이티브 뷰 개별 업데이트
+      ↓
+  OS → N개 레이어 합성
+
+
+[Canvas 기반]
+
+  UI Thread → Skia가 Canvas 1개에 드로우 콜 실행
+      ↓
+  GPU → 1개 텍스처에 모든 아이콘을 그림
+```
+
+**UI Thread에서 네이티브 뷰 N개를 개별 관리하는 것과 Canvas 1개에 그리는 것**의 차이가 있습니다.
+
+N장의 투명 필름을 매 프레임 개별로 옮기고 겹치는 것과 종이 한 장을 지우고 다시 그리는 것의 차이입니다.
+
+## 아이콘 수를 늘리면
+
+```text
+View 기반
+10개:  네이티브 뷰 10개 업데이트 → 레이어 10개 합성
+50개:  네이티브 뷰 50개 업데이트 → 레이어 50개 합성
+100개: 네이티브 뷰 100개 업데이트 → 레이어 100개 합성
+```
+
+```text
+Canvas 기반
+10개:  드로우 콜 10회 → 텍스처 1개 → 레이어 1개 합성
+50개:  드로우 콜 50회 → 텍스처 1개 → 레이어 1개 합성
+100개: 드로우 콜 100회 → 텍스처 1개 → 레이어 1개 합성
+```
+
+View 기반은 아이콘 수에 비례하여 레이어 합성 비용이 늘어납니다. Canvas는 드로우 콜은 늘어나지만 한 장의 그림 위에 계속 이어서 그리는 것이라 레이어는 항상 1개입니다.
+
+## OS의 레이어 합성에서 갈리는 차이
+
+마지막으로 화면에 실제 픽셀이 찍히는 단계에서도 차이가 있습니다.
+
+모바일 기기에서 화면에 무언가를 표시하려면 최종적으로 OS의 컴포지터가 레이어 합성을 수행합니다. 여기서 합성이란, 여러 레이어를 하나의 프레임으로 합쳐서 디스플레이에 보내는 작업입니다.
+
+**View 기반에서의 레이어 합성:**
+
+네이티브 뷰 하나는 OS에게 하나의 레이어입니다. 아이콘이 N개면 OS는 N개의 레이어를 관리합니다.
+
+```text
+[레이어 1: 아이콘 🎵]
+[레이어 2: 아이콘 📚]
+[레이어 3: 아이콘 ✅]   → OS가 N개 레이어를 합성 → 디스플레이
+...
+[레이어 N: 아이콘 🎯]
+```
+
+매 프레임 OS는 N개의 레이어 각각의 위치, 투명도, transform을 적용하면서 하나의 이미지로 합쳐야 합니다. 레이어 수가 늘어날수록 합성 비용도 늘어납니다. 레이어마다 별도의 텍스처 메모리도 필요합니다.
+
+**Canvas 기반에서의 레이어 합성:**
+
+Canvas는 네이티브 뷰가 1개입니다. Skia가 모든 아이콘을 한 장의 그림 위에 직접 그린 후 완성된 결과물을 OS에 넘깁니다.
+
+```text
+[Skia가 Canvas 위에 N개 아이콘을 그림]
+      ↓
+[텍스처 1개] → OS가 1개 레이어를 합성 → 디스플레이
+```
+
+OS 입장에서는 레이어가 1개입니다. N개의 아이콘이 있다는 사실을 OS는 모릅니다. 이미 하나의 이미지로 완성된 텍스처를 받아서 화면에 올리기만 하면 됩니다.
+
+```text
+[View]   OS가 N개 레이어를 합성 → 레이어 수에 비례하는 합성 비용 + 메모리
+[Canvas] OS가 1개 레이어를 합성 → 아이콘 수와 무관한 합성 비용
+```
+
+Skia가 미리 하나의 텍스처로 그려놓기 때문에 OS의 합성 단계에서는 할 일이 거의 없습니다. View 기반에서는 레이어 수만큼 합성 비용이 늘어납니다.
+
+## 정리
+
+<table>
+  <thead>
+    <tr>
+      <th></th>
+      <th>View (setState)</th>
+      <th>Canvas (SharedValue)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>JS Thread</td>
+      <td>React 리렌더링 N회</td>
+      <td>SharedValue 1회 할당</td>
+    </tr>
+    <tr>
+      <td>Shadow Tree</td>
+      <td>Yoga 레이아웃 재계산 N회</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>UI Thread</td>
+      <td>네이티브 뷰 N개 속성 개별 업데이트</td>
+      <td>Canvas 1개에 드로우 콜 N번 실행</td>
+    </tr>
+    <tr>
+      <td>OS 레이어 합성</td>
+      <td>N개 레이어 합성</td>
+      <td>1개 레이어 합성</td>
+    </tr>
+  </tbody>
+</table>
