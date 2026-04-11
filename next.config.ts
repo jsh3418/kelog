@@ -9,6 +9,9 @@ const withMDX = createMDX({
   extension: /\.(md|mdx)$/,
   options: {
     rehypePlugins: [
+      "rehype-slug",
+      "@stefanprobst/rehype-extract-toc",
+      ["@stefanprobst/rehype-extract-toc/mdx", { name: "toc" }],
       [
         "rehype-pretty-code",
         {

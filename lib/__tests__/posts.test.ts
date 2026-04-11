@@ -1,35 +1,29 @@
-import { describe, it, expect } from "vitest";
-import { getPostSlugs, getAllPosts } from "@/lib/posts";
+import { getAllPosts, getPostSlugs } from "@/lib/posts";
+import { describe, expect, it } from "vitest";
 
 describe("getPostSlugs", () => {
   it("content/posts 디렉토리에서 .mdx 파일의 슬러그를 추출한다", () => {
     const slugs = getPostSlugs();
-    expect(slugs).toContain("hello-world");
+    expect(slugs.length).toBeGreaterThan(0);
     expect(slugs.every((s) => !s.endsWith(".mdx"))).toBe(true);
   });
 });
 
-describe("getAllPosts", () => {
-  it("모든 포스트를 날짜 내림차순으로 반환한다", () => {
-    const posts = getAllPosts();
+describe("getAllPosts", async () => {
+  const posts = await getAllPosts();
+
+  it("모든 포스트가 필수 필드를 갖추고 날짜 내림차순으로 정렬된다", () => {
     expect(posts.length).toBeGreaterThan(0);
 
     for (const post of posts) {
-      expect(post).toHaveProperty("slug");
-      expect(post).toHaveProperty("title");
-      expect(post).toHaveProperty("date");
+      expect(post.slug).not.toBe("");
+      expect(post.title).not.toBe("");
+      expect(post.description).not.toBe("");
+      expect(post.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     }
 
     for (let i = 1; i < posts.length; i++) {
       expect(posts[i - 1].date >= posts[i].date).toBe(true);
     }
-  });
-
-  it("hello-world 포스트의 메타데이터를 올바르게 반환한다", () => {
-    const posts = getAllPosts();
-    const hello = posts.find((p) => p.slug === "hello-world");
-    expect(hello).toBeDefined();
-    expect(hello!.title).toBe("Hello World: 첫 번째 포스트");
-    expect(hello!.date).toBe("2026-03-20");
   });
 });

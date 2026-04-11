@@ -17,25 +17,14 @@ export function getPostSlugs(): string[] {
     .map((file) => file.replace(/\.mdx$/, ""));
 }
 
-export function getAllPosts(): PostMeta[] {
+export async function getAllPosts(): Promise<PostMeta[]> {
   const slugs = getPostSlugs();
-
-  const posts = slugs.map((slug) => {
-    const filePath = path.join(POSTS_DIR, `${slug}.mdx`);
-    const content = fs.readFileSync(filePath, "utf-8");
-    const metadata = extractMetadata(content);
-    return { slug, ...metadata } as PostMeta;
-  });
+  const posts = await Promise.all(
+    slugs.map(async (slug) => {
+      const { metadata } = await import(`@/content/posts/${slug}.mdx`);
+      return { slug, ...metadata } as PostMeta;
+    }),
+  );
 
   return posts.sort((a, b) => b.date.localeCompare(a.date));
-}
-
-export function extractMetadata(
-  content: string
-): Omit<PostMeta, "slug"> {
-  const match = content.match(
-    /export\s+const\s+metadata\s*=\s*(\{[\s\S]*?\n\});/
-  );
-  if (!match) throw new Error("No metadata found in MDX file");
-  return new Function(`return ${match[1]}`)() as Omit<PostMeta, "slug">;
 }
