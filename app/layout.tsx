@@ -1,6 +1,7 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
+import { ThemeColorSync } from "./components/theme-color-sync";
 import { ThemeProvider } from "./components/theme-provider";
 import { ThemeToggle } from "./components/theme-toggle";
 import "./globals.css";
@@ -26,6 +27,13 @@ export const metadata: Metadata = {
   description: "Frontend Developer Blog",
 };
 
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#121212" },
+  ],
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -39,6 +47,7 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         <ThemeProvider>
+          <ThemeColorSync />
           <header className="w-full border-b border-zinc-200 dark:border-zinc-800">
             <div className="max-w-3xl mx-auto px-8 py-4 flex items-center justify-between">
               <Link
