@@ -67,22 +67,25 @@ Accelerometer.setUpdateInterval(16.66); // 60fps = 16.66ms
 
 ```tsx
 const IconContent = React.memo(({ icon }: { icon: string }) => {
-  return <Text>{icon}</Text>;
+  return <Text style={styles.icon}>{icon}</Text>;
 });
 
-const PhysicsIcon = ({ body, icon }: { body: Matter.Body; icon: string }) => {
+const Circle = ({ body, icon, radius }: Props) => {
   const { x, y } = body.position;
-  const angle = body.angle;
+  const diameter = radius * 2;
 
   return (
     <View
-      style={{
-        transform: [
-          { translateX: x },
-          { translateY: y },
-          { rotate: `${angle}rad` },
-        ],
-      }}
+      style={[
+        styles.circle,
+        {
+          left: x - radius,
+          top: y - radius,
+          width: diameter,
+          height: diameter,
+          borderRadius: radius,
+        },
+      ]}
     >
       <IconContent icon={icon} />
     </View>
@@ -90,7 +93,7 @@ const PhysicsIcon = ({ body, icon }: { body: Matter.Body; icon: string }) => {
 };
 ```
 
-다만 이 최적화의 실질적 효과는 제한적이었다고 봅니다. `React.memo`가 막는 것은 `IconContent`의 리렌더링뿐이고 비용의 대부분을 차지하는 `PhysicsIcon`의 `<View>` 업데이트는 매 프레임 그대로 발생하기 때문입니다.
+다만 이 최적화의 실질적 효과는 제한적이었다고 봅니다. `React.memo`가 막는 것은 `IconContent`의 리렌더링뿐이고 비용의 대부분을 차지하는 `Circle`의 `<View>` 업데이트는 매 프레임 그대로 발생하기 때문입니다.
 
 ## 회고
 
