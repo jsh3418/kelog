@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
 import { Nav } from "./components/nav";
+import { TextSizeControl } from "./components/text-size-control";
 import { ThemeColorSync } from "./components/theme-color-sync";
 import { ThemeProvider } from "./components/theme-provider";
 import { ThemeToggle } from "./components/theme-toggle";
@@ -50,17 +51,20 @@ export default function RootLayout({
         <ThemeProvider>
           <ThemeColorSync />
           <header className="w-full border-b border-zinc-200 dark:border-zinc-800">
-            <div className="max-w-3xl mx-auto px-8 py-4 flex items-center justify-between gap-6">
-              <div className="flex items-baseline gap-6">
+            <div className="max-w-3xl mx-auto px-4 sm:px-8 py-4 flex items-center justify-between gap-3 sm:gap-6">
+              <div className="flex min-w-0 items-baseline gap-4 sm:gap-6">
                 <Link
                   href="/"
-                  className="text-4xl font-semibold tracking-tight text-black dark:text-zinc-50"
+                  className="text-3xl sm:text-4xl font-semibold tracking-tight text-black dark:text-zinc-50"
                 >
                   kelog
                 </Link>
                 <Nav />
               </div>
-              <ThemeToggle />
+              <div className="flex shrink-0 items-center gap-1">
+                <TextSizeControl />
+                <ThemeToggle />
+              </div>
             </div>
           </header>
           {children}
