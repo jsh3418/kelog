@@ -3,6 +3,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
 import { Nav } from "./components/nav";
+import { ScrollToTop } from "./components/scroll-to-top";
 import { TextSizeControl } from "./components/text-size-control";
 import { ThemeColorSync } from "./components/theme-color-sync";
 import { ThemeProvider } from "./components/theme-provider";
@@ -73,6 +74,7 @@ export default function RootLayout({
             </div>
           </header>
           {children}
+          <ScrollToTop />
         </ThemeProvider>
       </body>
     </html>

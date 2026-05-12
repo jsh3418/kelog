@@ -1,5 +1,6 @@
 "use client";
 
+import { smoothScrollIntoView } from "@/lib/scroll";
 import type { Toc as ExtractedToc } from "@stefanprobst/rehype-extract-toc";
 import { useEffect, useMemo, useState } from "react";
 
@@ -90,7 +91,7 @@ function TocList({
               e.preventDefault();
               const el = document.getElementById(node.id!);
               if (el) {
-                el.scrollIntoView({ behavior: "smooth" });
+                smoothScrollIntoView(el);
                 history.replaceState(null, "", `#${node.id}`);
               }
             }}
